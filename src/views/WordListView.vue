@@ -1,6 +1,6 @@
 <template>
   <AppLayout>
-    <div class="word-list-container">
+    <div class="word-list-container" @touchmove.stop>
       <!-- 搜索和跳转栏 -->
       <div class="search-section">
         <div class="search-box search-box-no-margin">
@@ -99,7 +99,7 @@
       </div>
 
       <!-- 单词列表 -->
-      <div class="word-list">
+      <div class="word-list" @touchmove.stop>
         <div
           v-for="word in filteredWords"
           :key="word.number"
@@ -262,14 +262,21 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   background: #ffffff;
+  overflow: hidden;
+  touch-action: pan-y;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
 }
 
 /* 搜索和筛选区域 */
 .search-section {
+  flex-shrink: 0;
   background: white;
   padding: 1.25rem 1.5rem;
   border-bottom: 1px solid rgba(0, 0, 0, 0.06);
   box-shadow: 0 4px 20px -8px rgba(0, 0, 0, 0.05);
+  z-index: 1;
+  touch-action: none;
 }
 
 .search-box {
@@ -390,7 +397,18 @@ onMounted(() => {
 .word-list {
   flex: 1;
   overflow-y: auto;
-  padding: 1rem 1.5rem calc(env(safe-area-inset-bottom, 0.75rem) + 5rem);
+  padding: 1rem 1.5rem;
+  margin-bottom: calc(env(safe-area-inset-bottom, 0.75rem) + 5rem);
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
+  overscroll-behavior: contain;
+  user-select: none;
+  cursor: pointer;
+}
+
+.word-list::-webkit-scrollbar {
+  width: 0;
+  background: transparent;
 }
 
 .word-item {
@@ -489,7 +507,7 @@ onMounted(() => {
 
 /* 加载更多 */
 .load-more {
-  padding: 2.5rem 0 4rem;
+  padding: 2.5rem 0;
   text-align: center;
 }
 
@@ -672,12 +690,17 @@ onMounted(() => {
 
 /* 响应式适配 */
 @media (max-width: 480px) {
+  .search-section {
+    padding: 1rem 1.25rem;
+  }
+
   .word-list {
-    padding: 0.75rem 1rem calc(env(safe-area-inset-bottom, 0.75rem) + 4.5rem);
+    padding: 0.75rem 1rem;
+    margin-bottom: calc(env(safe-area-inset-bottom, 0.75rem) + 4.5rem);
   }
 
   .load-more {
-    padding: 2rem 0 3.5rem;
+    padding: 2rem 0;
   }
 }
 </style>
