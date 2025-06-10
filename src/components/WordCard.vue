@@ -97,6 +97,15 @@ const handleTouchEnd = () => {
   isDragging.value = false
   dragY.value = 0
 }
+
+// 暴露给父组件的方法
+const resetTimer = () => {
+  touchStartTime.value = Date.now()
+}
+
+defineExpose({
+  resetTimer
+})
 </script>
 
 <style scoped>
