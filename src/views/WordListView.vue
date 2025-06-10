@@ -1,0 +1,683 @@
+<template>
+  <AppLayout>
+    <div class="word-list-container">
+      <!-- 搜索和跳转栏 -->
+      <div class="search-section">
+        <div class="search-box search-box-no-margin">
+          <div class="search-tabs">
+            <button
+              class="search-tab"
+              :class="{ active: searchMode === 'word' }"
+              @click="searchMode = 'word'"
+            >
+              单词搜索
+            </button>
+            <button
+              class="search-tab"
+              :class="{ active: searchMode === 'number' }"
+              @click="searchMode = 'number'"
+            >
+              序号跳转
+            </button>
+            <button
+              class="search-tab"
+              :class="{ active: searchMode === 'frequency' }"
+              @click="searchMode = 'frequency'"
+            >
+              词频跳转
+            </button>
+          </div>
+
+          <!-- 单词搜索 -->
+          <div v-if="searchMode === 'word'" class="search-input-group">
+            <svg class="search-icon" viewBox="0 0 24 24">
+              <path
+                d="M9.5,3A6.5,6.5 0 0,1 16,9.5C16,11.11 15.41,12.59 14.44,13.73L14.71,14H15.5L20.5,19L19,20.5L14,15.5V14.71L13.73,14.44C12.59,15.41 11.11,16 9.5,16A6.5,6.5 0 0,1 3,9.5A6.5,6.5 0 0,1 9.5,3M9.5,5C7,5 5,7 5,9.5C5,12 7,14 9.5,14C12,14 14,12 14,9.5C14,7 12,5 9.5,5Z"
+              />
+            </svg>
+            <input
+              v-model="searchQuery"
+              type="text"
+              placeholder="搜索单词..."
+              class="search-input"
+            />
+            <button v-if="searchQuery" @click="clearSearch" class="clear-btn">
+              <svg viewBox="0 0 24 24">
+                <path
+                  d="M19,6.41L17.59,5 12,10.59 6.41,5 5,6.41 10.59,12 5,17.59 6.41,19 12,13.41 17.59,19 19,17.59 13.41,12z"
+                />
+              </svg>
+            </button>
+          </div>
+
+          <!-- 序号跳转 -->
+          <div v-if="searchMode === 'number'" class="search-input-group">
+            <svg class="search-icon" viewBox="0 0 24 24">
+              <path
+                d="M4,17V9H2V7H6V17H4M22,15C22,16.11 21.1,17 20,17H16V15H20V13H18V11H20V9H16V7H20A2,2 0 0,1 22,9V10.5A1.5,1.5 0 0,1 20.5,12A1.5,1.5 0 0,1 22,13.5V15M14,15V17H8V13C8,11.89 8.9,11 10,11H12V9H8V7H12A2,2 0 0,1 14,9V11C14,12.11 13.1,13 12,13H10V15H14Z"
+              />
+            </svg>
+            <input
+              v-model="numberInput"
+              type="number"
+              placeholder="输入序号..."
+              class="search-input"
+              min="1"
+              :max="wordStore.words.length"
+              @keyup.enter="jumpToNumber"
+            />
+            <button class="jump-btn" @click="jumpToNumber">跳转</button>
+          </div>
+
+          <!-- 词频搜索 -->
+          <div v-if="searchMode === 'frequency'" class="search-input-group">
+            <svg class="search-icon" viewBox="0 0 24 24">
+              <path
+                d="M16,11.78L20.24,4.45L21.97,5.45L16.74,14.5L10.23,10.75L5.46,19H22V21H2V3H4V17.54L9.5,8L16,11.78Z"
+              />
+            </svg>
+            <input
+              v-model="frequencyInput"
+              type="number"
+              placeholder="搜索词频..."
+              class="search-input"
+              min="1"
+            />
+            <button
+              v-if="frequencyInput"
+              @click="clearSearch"
+              class="clear-btn"
+            >
+              <svg viewBox="0 0 24 24">
+                <path
+                  d="M19,6.41L17.59,5 12,10.59 6.41,5 5,6.41 10.59,12 5,17.59 6.41,19 12,13.41 17.59,19 19,17.59 13.41,12z"
+                />
+              </svg>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 单词列表 -->
+      <div class="word-list">
+        <div
+          v-for="word in filteredWords"
+          :key="word.number"
+          class="word-item"
+          @click="startLearningFrom(getOriginalIndex(word))"
+        >
+          <div class="word-number">#{{ word.number }}</div>
+          <div class="word-content">
+            <div class="word-main">
+              <span class="word-text">{{ word.word }}</span>
+              <span class="word-meaning">{{ word.meaning }}</span>
+            </div>
+            <div class="word-meta">
+              <span class="frequency">频率: {{ word.frequency }}</span>
+            </div>
+          </div>
+          <div class="word-actions">
+            <svg class="play-icon" viewBox="0 0 24 24">
+              <path d="M8,5.14V19.14L19,12.14L8,5.14Z" />
+            </svg>
+          </div>
+        </div>
+
+        <!-- 加载更多 -->
+        <div v-if="hasMore" class="load-more" @click="loadMore">
+          <button class="load-more-btn">加载更多</button>
+        </div>
+
+        <!-- 无结果提示 -->
+        <div v-if="filteredWords.length === 0" class="no-results">
+          <svg class="no-results-icon" viewBox="0 0 24 24">
+            <path
+              d="M9.5,3A6.5,6.5 0 0,1 16,9.5C16,11.11 15.41,12.59 14.44,13.73L14.71,14H15.5L20.5,19L19,20.5L14,15.5V14.71L13.73,14.44C12.59,15.41 11.11,16 9.5,16A6.5,6.5 0 0,1 3,9.5A6.5,6.5 0 0,1 9.5,3M9.5,5C7,5 5,7 5,9.5C5,12 7,14 9.5,14C12,14 14,12 14,9.5C14,7 12,5 9.5,5Z"
+            />
+          </svg>
+          <p>没有找到匹配的单词</p>
+          <button @click="clearSearch" class="clear-search-btn">
+            清空搜索
+          </button>
+        </div>
+      </div>
+    </div>
+  </AppLayout>
+</template>
+
+<script setup lang="ts">
+import { ref, computed, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
+import { useWordStore } from '../stores/wordStore'
+import type { Word } from '../types/word'
+import AppLayout from '../components/layout/AppLayout.vue'
+
+// 状态管理
+const wordStore = useWordStore()
+const router = useRouter()
+
+// 响应式数据
+const searchMode = ref<'word' | 'number' | 'frequency'>('word')
+const searchQuery = ref('')
+const numberInput = ref('')
+const frequencyInput = ref('')
+const pageSize = 50
+const currentPage = ref(1)
+
+// 计算属性
+const filteredWords = computed(() => {
+  let words = [...wordStore.words]
+
+  // 搜索过滤
+  if (searchMode.value === 'word' && searchQuery.value) {
+    // 单词搜索
+    const query = searchQuery.value.toLowerCase()
+    words = words.filter(
+      (word) =>
+        word.word.toLowerCase().includes(query) || word.meaning.includes(query)
+    )
+  } else if (searchMode.value === 'frequency' && frequencyInput.value) {
+    const targetFreq = parseInt(frequencyInput.value)
+    if (!isNaN(targetFreq)) {
+      // 先查找完全匹配的
+      const exactMatches = words.filter((word) => word.frequency === targetFreq)
+
+      if (exactMatches.length > 0) {
+        // 有完全匹配的词频，只显示第一个
+        words = [exactMatches[0]]
+      } else {
+        // 没有完全匹配的，显示接近的（上下浮动50）
+        const range = 50
+        words = words
+          .filter(
+            (word) =>
+              word.frequency >= targetFreq - range &&
+              word.frequency <= targetFreq + range
+          )
+          .sort((a, b) => {
+            // 按照与目标词频的接近程度排序
+            const diffA = Math.abs(a.frequency - targetFreq)
+            const diffB = Math.abs(b.frequency - targetFreq)
+            return diffA - diffB
+          })
+      }
+    }
+  }
+
+  // 只在普通浏览时进行分页（没有搜索且不在词频模式）
+  if (!searchQuery.value && !frequencyInput.value) {
+    words = words.slice(0, currentPage.value * pageSize)
+  }
+
+  return words
+})
+
+const hasMore = computed(() => {
+  // 只在普通浏览模式下显示加载更多
+  return (
+    !searchQuery.value &&
+    !frequencyInput.value &&
+    currentPage.value * pageSize < wordStore.words.length
+  )
+})
+
+// 方法
+const clearSearch = () => {
+  searchQuery.value = ''
+  numberInput.value = ''
+  frequencyInput.value = ''
+}
+
+const loadMore = () => {
+  currentPage.value++
+}
+
+const getOriginalIndex = (word: Word) => {
+  return wordStore.words.findIndex((w) => w.number === word.number)
+}
+
+const startLearningFrom = (index: number) => {
+  if (index >= 0) {
+    wordStore.jumpToWord(index)
+    router.push('/')
+  }
+}
+
+const jumpToNumber = () => {
+  const number = parseInt(numberInput.value)
+  if (number > 0 && number <= wordStore.words.length) {
+    startLearningFrom(number - 1) // 序号从1开始，索引从0开始
+  }
+}
+
+// 生命周期
+onMounted(() => {
+  wordStore.initializeStore()
+})
+</script>
+
+<style scoped>
+.word-list-container {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: #ffffff;
+}
+
+/* 搜索和筛选区域 */
+.search-section {
+  background: white;
+  padding: 1.25rem 1.5rem;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  box-shadow: 0 4px 20px -8px rgba(0, 0, 0, 0.05);
+}
+
+.search-box {
+  position: relative;
+}
+
+.search-box-no-margin {
+  margin-bottom: 0;
+}
+
+.search-tabs {
+  display: flex;
+  gap: 0.75rem;
+  margin-bottom: 1.25rem;
+}
+
+.search-tab {
+  padding: 0.625rem 1.25rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.75rem;
+  background: white;
+  color: #64748b;
+  font-size: 0.9375rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.search-tab:hover {
+  background: rgba(37, 99, 235, 0.04);
+  border-color: #e2e8f0;
+  color: #2563eb;
+}
+
+.search-tab.active {
+  background: #2563eb;
+  border-color: #2563eb;
+  color: white;
+}
+
+.search-input-group {
+  position: relative;
+  display: flex;
+  gap: 0.75rem;
+}
+
+.search-icon {
+  position: absolute;
+  left: 1.25rem;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 1.375rem;
+  height: 1.375rem;
+  fill: #94a3b8;
+}
+
+.search-input {
+  flex: 1;
+  padding: 0.875rem 1.25rem 0.875rem 3.25rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.75rem;
+  font-size: 1rem;
+  background: white;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  box-sizing: border-box;
+  color: #0f172a;
+}
+
+.search-input:focus {
+  outline: none;
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+.clear-btn {
+  position: absolute;
+  right: 0.75rem;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0.5rem;
+  border-radius: 0.75rem;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  color: #94a3b8;
+}
+
+.clear-btn:hover {
+  background: rgba(37, 99, 235, 0.06);
+  color: #2563eb;
+}
+
+.clear-btn svg {
+  width: 1.25rem;
+  height: 1.25rem;
+  fill: currentColor;
+}
+
+.jump-btn {
+  padding: 0.875rem 1.75rem;
+  border: none;
+  border-radius: 0.75rem;
+  background: #2563eb;
+  color: white;
+  font-size: 1rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.jump-btn:hover {
+  background: #1d4ed8;
+  transform: translateY(-1px);
+}
+
+/* 单词列表 */
+.word-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 1rem 1.5rem calc(env(safe-area-inset-bottom, 0.75rem) + 5rem);
+}
+
+.word-item {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+  padding: 1.25rem;
+  margin-bottom: 0.75rem;
+  background: white;
+  border-radius: 1rem;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+  border: 1px solid rgba(0, 0, 0, 0.04);
+}
+
+.word-item:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+  border-color: rgba(37, 99, 235, 0.1);
+}
+
+.word-item:active {
+  transform: translateY(0);
+}
+
+.word-number {
+  background: #2563eb;
+  color: white;
+  padding: 0.625rem 0.875rem;
+  border-radius: 0.75rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  min-width: 3.25rem;
+  text-align: center;
+  letter-spacing: -0.01em;
+}
+
+.word-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.word-main {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  margin-bottom: 0.625rem;
+}
+
+.word-text {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: #0f172a;
+  letter-spacing: -0.02em;
+}
+
+.word-meaning {
+  font-size: 1rem;
+  color: #64748b;
+  line-height: 1.5;
+}
+
+.word-meta {
+  display: flex;
+  gap: 1rem;
+}
+
+.frequency {
+  font-size: 0.875rem;
+  color: #94a3b8;
+  font-weight: 500;
+}
+
+.word-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  border-radius: 0.75rem;
+  background: rgba(37, 99, 235, 0.06);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.word-item:hover .word-actions {
+  background: rgba(37, 99, 235, 0.1);
+  transform: scale(1.05);
+}
+
+.play-icon {
+  width: 1.375rem;
+  height: 1.375rem;
+  fill: #2563eb;
+}
+
+/* 加载更多 */
+.load-more {
+  padding: 2.5rem 0 4rem;
+  text-align: center;
+}
+
+.load-more-btn {
+  padding: 0.875rem 2.5rem;
+  background: #2563eb;
+  color: white;
+  border: none;
+  border-radius: 0.75rem;
+  font-size: 1rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.load-more-btn:hover {
+  background: #1d4ed8;
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(37, 99, 235, 0.25);
+}
+
+/* 无结果提示 */
+.no-results {
+  text-align: center;
+  padding: 4rem 0;
+  color: #64748b;
+}
+
+.no-results-icon {
+  width: 3rem;
+  height: 3rem;
+  fill: #94a3b8;
+  margin-bottom: 1rem;
+}
+
+.no-results p {
+  font-size: 1.125rem;
+  margin: 0 0 1.5rem;
+}
+
+.clear-search-btn {
+  padding: 0.75rem 2rem;
+  background: rgba(37, 99, 235, 0.06);
+  color: #2563eb;
+  border: none;
+  border-radius: 0.75rem;
+  font-size: 1rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.clear-search-btn:hover {
+  background: rgba(37, 99, 235, 0.1);
+}
+
+/* 暗黑模式适配 */
+@media (prefers-color-scheme: dark) {
+  .word-list-container {
+    background: #0f172a;
+  }
+
+  .search-section {
+    background: rgba(15, 23, 42, 0.98);
+    border-bottom-color: rgba(255, 255, 255, 0.1);
+  }
+
+  .search-tab {
+    background: #1e293b;
+    border-color: #334155;
+    color: #94a3b8;
+  }
+
+  .search-tab:hover {
+    background: rgba(37, 99, 235, 0.15);
+    color: #60a5fa;
+  }
+
+  .search-tab.active {
+    background: #2563eb;
+    border-color: #2563eb;
+    color: white;
+  }
+
+  .search-input {
+    background: #1e293b;
+    border-color: #334155;
+    color: #f1f5f9;
+  }
+
+  .search-input:focus {
+    border-color: #60a5fa;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.2);
+  }
+
+  .search-icon {
+    fill: #64748b;
+  }
+
+  .clear-btn {
+    color: #64748b;
+  }
+
+  .clear-btn:hover {
+    background: rgba(37, 99, 235, 0.15);
+    color: #60a5fa;
+  }
+
+  .jump-btn {
+    background: #2563eb;
+  }
+
+  .jump-btn:hover {
+    background: #1d4ed8;
+  }
+
+  .word-item {
+    background: rgba(15, 23, 42, 0.98);
+    border-color: rgba(255, 255, 255, 0.1);
+  }
+
+  .word-item:hover {
+    border-color: rgba(37, 99, 235, 0.2);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+  }
+
+  .word-number {
+    background: #2563eb;
+  }
+
+  .word-text {
+    color: #f1f5f9;
+  }
+
+  .word-meaning {
+    color: #94a3b8;
+  }
+
+  .frequency {
+    color: #64748b;
+  }
+
+  .word-actions {
+    background: rgba(37, 99, 235, 0.15);
+  }
+
+  .word-item:hover .word-actions {
+    background: rgba(37, 99, 235, 0.2);
+  }
+
+  .play-icon {
+    fill: #60a5fa;
+  }
+
+  .load-more-btn {
+    background: #2563eb;
+  }
+
+  .load-more-btn:hover {
+    background: #1d4ed8;
+  }
+
+  .no-results {
+    color: #94a3b8;
+  }
+
+  .no-results-icon {
+    fill: #64748b;
+  }
+
+  .clear-search-btn {
+    background: rgba(37, 99, 235, 0.15);
+    color: #60a5fa;
+  }
+
+  .clear-search-btn:hover {
+    background: rgba(37, 99, 235, 0.2);
+  }
+}
+
+/* 响应式适配 */
+@media (max-width: 480px) {
+  .word-list {
+    padding: 0.75rem 1rem calc(env(safe-area-inset-bottom, 0.75rem) + 4.5rem);
+  }
+
+  .load-more {
+    padding: 2rem 0 3.5rem;
+  }
+}
+</style>
