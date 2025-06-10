@@ -9,6 +9,7 @@ export const useWordStore = defineStore('word', () => {
   const wordRecords = ref<Map<number, WordRecord>>(new Map())
   const currentWordIndex = ref(0)
   const isLoading = ref(false)
+  const learnedWords = ref<Set<number>>(new Set())
 
   // 从localStorage加载数据
   const loadFromStorage = () => {
@@ -96,6 +97,17 @@ export const useWordStore = defineStore('word', () => {
   // 方法
   const initializeStore = () => {
     loadFromStorage()
+
+    // 加载已学习的单词
+    const savedProgress = localStorage.getItem('wordApp_progress')
+    if (savedProgress) {
+      try {
+        const progress = JSON.parse(savedProgress)
+        learnedWords.value = new Set(progress.learnedWords)
+      } catch (e) {
+        console.error('加载进度失败:', e)
+      }
+    }
   }
 
   const nextWord = () => {
@@ -104,6 +116,12 @@ export const useWordStore = defineStore('word', () => {
     } else {
       // 循环回到开始或者可以实现智能推荐
       currentWordIndex.value = 0
+    }
+  }
+
+  const prevWord = () => {
+    if (currentWordIndex.value > 0) {
+      currentWordIndex.value--
     }
   }
 
@@ -173,6 +191,8 @@ export const useWordStore = defineStore('word', () => {
   const resetProgress = () => {
     wordRecords.value.clear()
     currentWordIndex.value = 0
+    learnedWords.value.clear()
+    localStorage.removeItem('wordApp_progress')
     saveToStorage()
   }
 
@@ -182,12 +202,51 @@ export const useWordStore = defineStore('word', () => {
     }
   }
 
+  const saveProgress = (currentIndex: number) => {
+    // 将当前索引之前的所有单词标记为已学习
+    for (let i = 0; i <= currentIndex; i++) {
+      learnedWords.value.add(words.value[i].number)
+    }
+
+    // 保存进度
+    try {
+      localStorage.setItem(
+        'wordApp_progress',
+        JSON.stringify({
+          learnedWords: Array.from(learnedWords.value)
+        })
+      )
+    } catch (e) {
+      console.error('保存进度失败:', e)
+    }
+  }
+
+  const isWordLearned = (wordNumber: number) => {
+    return learnedWords.value.has(wordNumber)
+  }
+
+  const unmarkWord = (wordNumber: number) => {
+    learnedWords.value.delete(wordNumber)
+    // 保存进度
+    try {
+      localStorage.setItem(
+        'wordApp_progress',
+        JSON.stringify({
+          learnedWords: Array.from(learnedWords.value)
+        })
+      )
+    } catch (e) {
+      console.error('保存进度失败:', e)
+    }
+  }
+
   return {
     // 状态
     words,
     wordRecords,
     currentWordIndex,
     isLoading,
+    learnedWords,
 
     // 计算属性
     currentWord,
@@ -197,8 +256,12 @@ export const useWordStore = defineStore('word', () => {
     // 方法
     initializeStore,
     nextWord,
+    prevWord,
     recordWordView,
     resetProgress,
-    jumpToWord
+    jumpToWord,
+    saveProgress,
+    isWordLearned,
+    unmarkWord
   }
 })

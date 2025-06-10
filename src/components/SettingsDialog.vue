@@ -18,7 +18,7 @@
             <h3>学习设置</h3>
             <div class="setting-item">
               <label class="switch-label">
-                <span>自动切换（5秒后）</span>
+                <span>自动切换</span>
                 <div class="switch">
                   <input
                     type="checkbox"
@@ -30,18 +30,20 @@
               </label>
             </div>
 
-            <div class="setting-item">
-              <label class="select-label">
-                敏感度：
-                <select
-                  v-model="localSettings.sensitivity"
-                  @change="updateSettings"
-                  class="select-input"
-                >
-                  <option value="low">低（学习更久）</option>
-                  <option value="medium">中等</option>
-                  <option value="high">高（快速学习）</option>
-                </select>
+            <div class="setting-item" v-if="localSettings.autoNext">
+              <label class="input-label">
+                切换间隔：
+                <div class="input-with-unit">
+                  <input
+                    type="number"
+                    v-model.number="localSettings.autoNextInterval"
+                    @input="handleIntervalInput"
+                    class="number-input"
+                    min="1"
+                    step="1"
+                  />
+                  <span class="unit">秒</span>
+                </div>
               </label>
             </div>
           </div>
@@ -84,7 +86,7 @@ import { ref, watch } from 'vue'
 
 interface Settings {
   autoNext: boolean
-  sensitivity: 'low' | 'medium' | 'high'
+  autoNextInterval: number
 }
 
 interface Props {
@@ -104,7 +106,7 @@ const emit = defineEmits<Emits>()
 // 本地设置状态
 const localSettings = ref<Settings>({
   autoNext: props.settings.autoNext,
-  sensitivity: props.settings.sensitivity
+  autoNextInterval: props.settings.autoNextInterval
 })
 
 // 监听props变化
@@ -120,6 +122,18 @@ watch(
 const showResetConfirm = ref(false)
 
 // 方法
+const handleIntervalInput = () => {
+  // 确保值不小于1
+  if (localSettings.value.autoNextInterval < 1) {
+    localSettings.value.autoNextInterval = 1
+  }
+  // 确保是整数
+  localSettings.value.autoNextInterval = Math.floor(
+    localSettings.value.autoNextInterval
+  )
+  updateSettings()
+}
+
 const updateSettings = () => {
   emit('update', { ...localSettings.value })
 }
@@ -282,38 +296,54 @@ input:checked + .slider:before {
   transform: translateX(1.125rem);
 }
 
-/* 下拉框样式 */
-.select-label {
+/* 输入框样式 */
+.input-label {
   display: flex;
   align-items: center;
   gap: 1rem;
   color: #334155;
-  font-size: 1rem;
+  font-size: 0.9375rem;
   font-weight: 500;
 }
 
-.select-input {
+.input-with-unit {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
   flex: 1;
-  padding: 0.75rem 1rem;
+}
+
+.number-input {
+  flex: 1;
+  padding: 0.625rem 0.875rem;
   border: 1px solid #e2e8f0;
   border-radius: 0.75rem;
   background: white;
   color: #334155;
   font-size: 0.9375rem;
-  cursor: pointer;
+  font-weight: 500;
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-  appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right 0.75rem center;
-  background-size: 1.25rem;
-  padding-right: 2.5rem;
+  width: 5rem;
+  text-align: center;
+  -moz-appearance: textfield;
 }
 
-.select-input:focus {
+.number-input::-webkit-outer-spin-button,
+.number-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.number-input:focus {
   outline: none;
   border-color: #2563eb;
   box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+.unit {
+  color: #64748b;
+  font-size: 0.875rem;
+  font-weight: 500;
 }
 
 /* 危险按钮 */
@@ -504,20 +534,23 @@ input:checked + .slider:before {
     background-color: #2563eb;
   }
 
-  .select-label {
+  .input-label {
     color: #e2e8f0;
   }
 
-  .select-input {
-    background-color: #1e293b;
+  .number-input {
+    background: #1e293b;
     border-color: #334155;
     color: #f1f5f9;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
   }
 
-  .select-input:focus {
+  .number-input:focus {
     border-color: #60a5fa;
     box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.2);
+  }
+
+  .unit {
+    color: #94a3b8;
   }
 
   .danger-btn {

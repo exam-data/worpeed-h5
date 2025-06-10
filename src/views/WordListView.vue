@@ -99,33 +99,27 @@
       </div>
 
       <!-- 单词列表 -->
-      <div class="word-list" @touchmove.stop>
+      <div class="word-list" ref="wordListRef" @scroll="handleScroll">
         <div
           v-for="word in filteredWords"
           :key="word.number"
           class="word-item"
-          @click="startLearningFrom(getOriginalIndex(word))"
+          :class="{ learned: wordStore.isWordLearned(word.number) }"
+          @click="handleWordClick(word)"
         >
-          <div class="word-number">#{{ word.number }}</div>
           <div class="word-content">
-            <div class="word-main">
-              <span class="word-text">{{ word.word }}</span>
-              <span class="word-meaning">{{ word.meaning }}</span>
-            </div>
-            <div class="word-meta">
-              <span class="frequency">频率: {{ word.frequency }}</span>
-            </div>
+            <span class="word-text">{{ word.word }}</span>
+            <span class="word-meaning">{{ word.meaning }}</span>
           </div>
-          <div class="word-actions">
-            <svg class="play-icon" viewBox="0 0 24 24">
-              <path d="M8,5.14V19.14L19,12.14L8,5.14Z" />
-            </svg>
-          </div>
-        </div>
-
-        <!-- 加载更多 -->
-        <div v-if="hasMore" class="load-more" @click="loadMore">
-          <button class="load-more-btn">加载更多</button>
+          <svg
+            v-if="wordStore.isWordLearned(word.number)"
+            viewBox="0 0 24 24"
+            class="learned-icon"
+          >
+            <path
+              d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"
+            />
+          </svg>
         </div>
 
         <!-- 无结果提示 -->
@@ -141,12 +135,24 @@
           </button>
         </div>
       </div>
+
+      <!-- 确认弹窗 -->
+      <div v-if="showConfirm" class="confirm-dialog" @click="cancelConfirm">
+        <div class="confirm-content" @click.stop>
+          <h3>标记学习进度</h3>
+          <p>是否将此单词之前的所有单词标记为已学习？</p>
+          <div class="confirm-actions">
+            <button class="cancel-btn" @click="cancelConfirm">否</button>
+            <button class="confirm-btn" @click="confirmAndStart">是</button>
+          </div>
+        </div>
+      </div>
     </div>
   </AppLayout>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useWordStore } from '../stores/wordStore'
 import type { Word } from '../types/word'
@@ -161,8 +167,14 @@ const searchMode = ref<'word' | 'number' | 'frequency'>('word')
 const searchQuery = ref('')
 const numberInput = ref('')
 const frequencyInput = ref('')
-const pageSize = 50
+const pageSize = 100
 const currentPage = ref(1)
+const isLoading = ref(false)
+const wordListRef = ref<HTMLElement | null>(null)
+
+// 确认弹窗状态
+const showConfirm = ref(false)
+const selectedWordIndex = ref(-1)
 
 // 计算属性
 const filteredWords = computed(() => {
@@ -226,10 +238,28 @@ const clearSearch = () => {
   searchQuery.value = ''
   numberInput.value = ''
   frequencyInput.value = ''
+  currentPage.value = 1
 }
 
-const loadMore = () => {
-  currentPage.value++
+const loadMore = async () => {
+  if (isLoading.value || !hasMore.value) return
+
+  isLoading.value = true
+  try {
+    currentPage.value++
+  } finally {
+    isLoading.value = false
+  }
+}
+
+const handleScroll = () => {
+  if (!wordListRef.value) return
+
+  const { scrollTop, scrollHeight, clientHeight } = wordListRef.value
+  // 当滚动到距离底部100px时就开始加载
+  if (scrollHeight - scrollTop - clientHeight < 100) {
+    loadMore()
+  }
 }
 
 const getOriginalIndex = (word: Word) => {
@@ -248,6 +278,30 @@ const jumpToNumber = () => {
   if (number > 0 && number <= wordStore.words.length) {
     startLearningFrom(number - 1) // 序号从1开始，索引从0开始
   }
+}
+
+const handleWordClick = (word: Word) => {
+  const index = getOriginalIndex(word)
+  if (index > 0 && !wordStore.isWordLearned(word.number)) {
+    // 如果不是第一个单词且未学习，显示确认弹窗
+    selectedWordIndex.value = index
+    showConfirm.value = true
+  } else {
+    // 如果是第一个单词或已学习，直接跳转
+    startLearningFrom(index)
+  }
+}
+
+const cancelConfirm = () => {
+  showConfirm.value = false
+  startLearningFrom(selectedWordIndex.value)
+}
+
+const confirmAndStart = () => {
+  // 保存进度
+  wordStore.saveProgress(selectedWordIndex.value - 1)
+  showConfirm.value = false
+  startLearningFrom(selectedWordIndex.value)
 }
 
 // 生命周期
@@ -272,7 +326,7 @@ onMounted(() => {
 .search-section {
   flex-shrink: 0;
   background: white;
-  padding: 1.25rem 1.5rem;
+  padding: 1rem 1.5rem;
   border-bottom: 1px solid rgba(0, 0, 0, 0.06);
   box-shadow: 0 4px 20px -8px rgba(0, 0, 0, 0.05);
   z-index: 1;
@@ -397,7 +451,7 @@ onMounted(() => {
 .word-list {
   flex: 1;
   overflow-y: auto;
-  padding: 1rem 1.5rem;
+  padding: 0.5rem 1.5rem;
   margin-bottom: calc(env(safe-area-inset-bottom, 0.75rem) + 5rem);
   -webkit-overflow-scrolling: touch;
   touch-action: pan-y;
@@ -414,73 +468,68 @@ onMounted(() => {
 .word-item {
   display: flex;
   align-items: center;
-  gap: 1.25rem;
-  padding: 1.25rem;
-  margin-bottom: 0.75rem;
+  padding: 0.75rem 1rem;
+  margin-bottom: 0.5rem;
   background: white;
-  border-radius: 1rem;
+  border-radius: 0.75rem;
   cursor: pointer;
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
   border: 1px solid rgba(0, 0, 0, 0.04);
 }
 
+.word-item.learned {
+  background: rgba(5, 150, 105, 0.04);
+  border-color: rgba(5, 150, 105, 0.1);
+}
+
 .word-item:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+  background: rgba(37, 99, 235, 0.04);
   border-color: rgba(37, 99, 235, 0.1);
 }
 
-.word-item:active {
-  transform: translateY(0);
-}
-
-.word-number {
-  background: #2563eb;
-  color: white;
-  padding: 0.625rem 0.875rem;
-  border-radius: 0.75rem;
-  font-size: 0.875rem;
-  font-weight: 600;
-  min-width: 3.25rem;
-  text-align: center;
-  letter-spacing: -0.01em;
+.word-item.learned:hover {
+  background: rgba(5, 150, 105, 0.08);
+  border-color: rgba(5, 150, 105, 0.15);
 }
 
 .word-content {
   flex: 1;
   min-width: 0;
-}
-
-.word-main {
   display: flex;
-  flex-direction: column;
-  gap: 0.375rem;
-  margin-bottom: 0.625rem;
-}
-
-.word-text {
-  font-size: 1.25rem;
-  font-weight: 600;
-  color: #0f172a;
-  letter-spacing: -0.02em;
-}
-
-.word-meaning {
-  font-size: 1rem;
-  color: #64748b;
-  line-height: 1.5;
-}
-
-.word-meta {
-  display: flex;
+  align-items: center;
   gap: 1rem;
 }
 
-.frequency {
-  font-size: 0.875rem;
+.word-number {
+  font-size: 0.75rem;
   color: #94a3b8;
   font-weight: 500;
+  min-width: 2.5rem;
+}
+
+.word-text {
+  font-size: 1.125rem;
+  font-weight: 500;
+  color: #0f172a;
+  letter-spacing: -0.01em;
+  flex-shrink: 0;
+}
+
+.word-meaning {
+  font-size: 0.875rem;
+  color: #64748b;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+}
+
+.word-frequency {
+  font-size: 0.75rem;
+  color: #94a3b8;
+  font-weight: 500;
+  margin-left: 0.5rem;
+  flex-shrink: 0;
 }
 
 .word-actions {
@@ -505,56 +554,40 @@ onMounted(() => {
   fill: #2563eb;
 }
 
-/* 加载更多 */
-.load-more {
-  padding: 2.5rem 0;
-  text-align: center;
-}
-
-.load-more-btn {
-  padding: 0.875rem 2.5rem;
-  background: #2563eb;
-  color: white;
-  border: none;
-  border-radius: 0.75rem;
-  font-size: 1rem;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.load-more-btn:hover {
-  background: #1d4ed8;
-  transform: translateY(-2px);
-  box-shadow: 0 8px 24px rgba(37, 99, 235, 0.25);
+.learned-icon {
+  width: 1.25rem;
+  height: 1.25rem;
+  fill: #059669;
+  margin-left: 0.75rem;
+  flex-shrink: 0;
 }
 
 /* 无结果提示 */
 .no-results {
   text-align: center;
-  padding: 4rem 0;
+  padding: 3rem 0;
   color: #64748b;
 }
 
 .no-results-icon {
-  width: 3rem;
-  height: 3rem;
+  width: 2.5rem;
+  height: 2.5rem;
   fill: #94a3b8;
-  margin-bottom: 1rem;
+  margin-bottom: 0.75rem;
 }
 
 .no-results p {
-  font-size: 1.125rem;
-  margin: 0 0 1.5rem;
+  font-size: 1rem;
+  margin: 0 0 1rem;
 }
 
 .clear-search-btn {
-  padding: 0.75rem 2rem;
+  padding: 0.625rem 1.5rem;
   background: rgba(37, 99, 235, 0.06);
   color: #2563eb;
   border: none;
   border-radius: 0.75rem;
-  font-size: 1rem;
+  font-size: 0.875rem;
   font-weight: 500;
   cursor: pointer;
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
@@ -562,6 +595,41 @@ onMounted(() => {
 
 .clear-search-btn:hover {
   background: rgba(37, 99, 235, 0.1);
+}
+
+/* 响应式适配 */
+@media (max-width: 480px) {
+  .search-section {
+    padding: 0.75rem 1rem;
+  }
+
+  .word-list {
+    padding: 0.5rem 1rem;
+    margin-bottom: calc(env(safe-area-inset-bottom, 0.75rem) + 4.5rem);
+  }
+
+  .word-item {
+    padding: 0.875rem 1rem;
+    margin-bottom: 0.5rem;
+    min-height: 3.25rem;
+  }
+
+  .word-number {
+    font-size: 0.6875rem;
+    min-width: 2rem;
+  }
+
+  .word-text {
+    font-size: 1rem;
+  }
+
+  .word-meaning {
+    font-size: 0.8125rem;
+  }
+
+  .word-frequency {
+    font-size: 0.6875rem;
+  }
 }
 
 /* 暗黑模式适配 */
@@ -572,70 +640,32 @@ onMounted(() => {
 
   .search-section {
     background: rgba(15, 23, 42, 0.98);
-    border-bottom-color: rgba(255, 255, 255, 0.1);
-  }
-
-  .search-tab {
-    background: #1e293b;
-    border-color: #334155;
-    color: #94a3b8;
-  }
-
-  .search-tab:hover {
-    background: rgba(37, 99, 235, 0.15);
-    color: #60a5fa;
-  }
-
-  .search-tab.active {
-    background: #2563eb;
-    border-color: #2563eb;
-    color: white;
-  }
-
-  .search-input {
-    background: #1e293b;
-    border-color: #334155;
-    color: #f1f5f9;
-  }
-
-  .search-input:focus {
-    border-color: #60a5fa;
-    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.2);
-  }
-
-  .search-icon {
-    fill: #64748b;
-  }
-
-  .clear-btn {
-    color: #64748b;
-  }
-
-  .clear-btn:hover {
-    background: rgba(37, 99, 235, 0.15);
-    color: #60a5fa;
-  }
-
-  .jump-btn {
-    background: #2563eb;
-  }
-
-  .jump-btn:hover {
-    background: #1d4ed8;
-  }
-
-  .word-item {
-    background: rgba(15, 23, 42, 0.98);
     border-color: rgba(255, 255, 255, 0.1);
   }
 
-  .word-item:hover {
-    border-color: rgba(37, 99, 235, 0.2);
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+  .word-item {
+    background: rgba(15, 23, 42, 0.6);
+    border-color: rgba(255, 255, 255, 0.06);
   }
 
-  .word-number {
-    background: #2563eb;
+  .word-item:hover {
+    background: rgba(37, 99, 235, 0.15);
+    border-color: rgba(37, 99, 235, 0.2);
+  }
+
+  .word-item.learned {
+    background: rgba(5, 150, 105, 0.1);
+    border-color: rgba(5, 150, 105, 0.2);
+  }
+
+  .word-item.learned:hover {
+    background: rgba(5, 150, 105, 0.15);
+    border-color: rgba(5, 150, 105, 0.25);
+  }
+
+  .word-number,
+  .word-frequency {
+    color: #64748b;
   }
 
   .word-text {
@@ -644,30 +674,6 @@ onMounted(() => {
 
   .word-meaning {
     color: #94a3b8;
-  }
-
-  .frequency {
-    color: #64748b;
-  }
-
-  .word-actions {
-    background: rgba(37, 99, 235, 0.15);
-  }
-
-  .word-item:hover .word-actions {
-    background: rgba(37, 99, 235, 0.2);
-  }
-
-  .play-icon {
-    fill: #60a5fa;
-  }
-
-  .load-more-btn {
-    background: #2563eb;
-  }
-
-  .load-more-btn:hover {
-    background: #1d4ed8;
   }
 
   .no-results {
@@ -686,21 +692,126 @@ onMounted(() => {
   .clear-search-btn:hover {
     background: rgba(37, 99, 235, 0.2);
   }
+
+  .learned-icon {
+    fill: #10b981;
+  }
 }
 
-/* 响应式适配 */
-@media (max-width: 480px) {
-  .search-section {
-    padding: 1rem 1.25rem;
+/* 确认弹窗 */
+.confirm-dialog {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(15, 23, 42, 0.6);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1100;
+  padding: 1rem;
+}
+
+.confirm-content {
+  background: white;
+  padding: 1.5rem;
+  border-radius: 1.25rem;
+  width: 100%;
+  max-width: 360px;
+  text-align: center;
+  box-shadow: 0 20px 40px -12px rgba(0, 0, 0, 0.15);
+}
+
+.confirm-content h3 {
+  margin: 0 0 0.75rem;
+  color: #0f172a;
+  font-size: 1.25rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.confirm-content p {
+  margin: 0 0 1.5rem;
+  color: #64748b;
+  font-size: 1rem;
+  line-height: 1.5;
+}
+
+.confirm-actions {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: center;
+}
+
+.confirm-actions button {
+  padding: 0.75rem 2rem;
+  border-radius: 0.75rem;
+  font-size: 1rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  min-width: 6rem;
+}
+
+.cancel-btn {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  color: #475569;
+}
+
+.cancel-btn:hover {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+  color: #334155;
+}
+
+.confirm-btn {
+  background: #2563eb;
+  border: 1px solid #2563eb;
+  color: white;
+}
+
+.confirm-btn:hover {
+  background: #1d4ed8;
+  border-color: #1d4ed8;
+}
+
+/* 暗黑模式适配 */
+@media (prefers-color-scheme: dark) {
+  .confirm-content {
+    background: #1e293b;
   }
 
-  .word-list {
-    padding: 0.75rem 1rem;
-    margin-bottom: calc(env(safe-area-inset-bottom, 0.75rem) + 4.5rem);
+  .confirm-content h3 {
+    color: #f1f5f9;
   }
 
-  .load-more {
-    padding: 2rem 0;
+  .confirm-content p {
+    color: #94a3b8;
+  }
+
+  .cancel-btn {
+    background: #0f172a;
+    border-color: #334155;
+    color: #e2e8f0;
+  }
+
+  .cancel-btn:hover {
+    background: #1e293b;
+    border-color: #475569;
+    color: #f1f5f9;
+  }
+
+  .confirm-btn {
+    background: #2563eb;
+    border-color: #2563eb;
+  }
+
+  .confirm-btn:hover {
+    background: #1d4ed8;
+    border-color: #1d4ed8;
   }
 }
 </style>
