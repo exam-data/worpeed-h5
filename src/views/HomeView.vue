@@ -5,6 +5,7 @@
   >
     <!-- 单词卡片 -->
     <WordCard
+      v-if="!showCongratulations"
       ref="wordCardRef"
       :word="wordStore.currentWord"
       @swipe-up="handleSwipeUp"
@@ -13,8 +14,16 @@
       :key="wordStore.currentWordIndex"
     />
 
+    <!-- 祝贺页面 -->
+    <CongratulationsView
+      v-if="showCongratulations"
+      :round="currentRound"
+      :stats="wordStore.learningStats"
+      @restart="handleRestart"
+    />
+
     <!-- 控制区域 -->
-    <div class="control-area">
+    <div class="control-area" v-if="!showCongratulations">
       <button
         v-if="settings.autoNext"
         class="control-btn pause-btn"
@@ -47,10 +56,14 @@
       @close="showSettings = false"
       @update="updateSettings"
       @reset="resetProgress"
+      @clearCache="handleClearCache"
     />
 
     <!-- 提示弹窗 -->
     <Toast :show="showToast" :message="toastMessage" />
+
+    <!-- 模式选择弹窗 -->
+    <ModeSelectDialog :show="showModeSelect" @select="handleModeSelect" />
   </AppLayout>
 </template>
 
@@ -61,10 +74,13 @@ import AppLayout from '../components/layout/AppLayout.vue'
 import WordCard from '../components/WordCard.vue'
 import SettingsDialog from '../components/SettingsDialog.vue'
 import Toast from '../components/Toast.vue'
+import ModeSelectDialog from '../components/ModeSelectDialog.vue'
+import CongratulationsView from '../components/CongratulationsView.vue'
 
 interface Settings {
   autoNext: boolean
   autoNextInterval: number
+  mode: 'sequential' | 'random'
 }
 
 // 状态管理
@@ -75,6 +91,9 @@ const showSettings = ref(false)
 const isPaused = ref(false)
 const showToast = ref(false)
 const toastMessage = ref('')
+const showModeSelect = ref(false)
+const showCongratulations = ref(false)
+const currentRound = ref(1)
 
 // 组件引用
 const wordCardRef = ref<InstanceType<typeof WordCard>>()
@@ -82,7 +101,8 @@ const wordCardRef = ref<InstanceType<typeof WordCard>>()
 // 设置
 const settings = ref<Settings>({
   autoNext: false,
-  autoNextInterval: 5
+  autoNextInterval: 5,
+  mode: 'sequential'
 })
 
 // 自动切换定时器
@@ -98,8 +118,9 @@ const handleSwipeUp = () => {
     if (wordStore.isWordLearned(currentWord.number)) {
       wordStore.unmarkWord(currentWord.number)
     }
-    if (wordStore.isWordLearned(wordStore.words[nextIndex].number)) {
-      wordStore.unmarkWord(wordStore.words[nextIndex].number)
+    const nextWord = wordStore.words[nextIndex]
+    if (nextWord && wordStore.isWordLearned(nextWord.number)) {
+      wordStore.unmarkWord(nextWord.number)
     }
   }
   goToNextWord()
@@ -107,7 +128,17 @@ const handleSwipeUp = () => {
 
 const handleSwipeDown = () => {
   clearAutoNextTimer()
-  wordStore.prevWord()
+
+  // 检查是否所有单词都已学习
+  const allLearned = wordStore.words.every((word) =>
+    wordStore.isWordLearned(word.number)
+  )
+
+  if (allLearned) {
+    showCongratulations.value = true
+  } else {
+    wordStore.prevWord()
+  }
 }
 
 const handleViewTime = (viewTime: number) => {
@@ -162,7 +193,18 @@ const resetProgress = () => {
 }
 
 const updateSettings = (newSettings: Settings) => {
+  const oldMode = settings.value.mode
   settings.value = newSettings
+
+  // 如果模式发生变化，需要处理学习顺序
+  if (oldMode !== newSettings.mode) {
+    if (newSettings.mode === 'random') {
+      wordStore.shuffleWords()
+      wordStore.saveLearningSequence()
+    } else {
+      wordStore.restoreOriginalOrder()
+    }
+  }
 
   // 根据新设置更新自动切换
   if (newSettings.autoNext && !isPaused.value) {
@@ -170,6 +212,13 @@ const updateSettings = (newSettings: Settings) => {
   } else if (!newSettings.autoNext) {
     clearAutoNextTimer()
     isPaused.value = false
+  }
+
+  // 保存设置
+  try {
+    localStorage.setItem('wordApp_settings', JSON.stringify(settings.value))
+  } catch (e) {
+    console.error('保存设置失败:', e)
   }
 }
 
@@ -179,6 +228,15 @@ const loadSettings = () => {
     try {
       const data = JSON.parse(saved)
       settings.value = { ...settings.value, ...data }
+
+      // 如果是随机模式且没有已保存的学习顺序，需要打乱顺序
+      if (
+        settings.value.mode === 'random' &&
+        !localStorage.getItem('wordApp_learning_sequence')
+      ) {
+        wordStore.shuffleWords()
+        wordStore.saveLearningSequence()
+      }
 
       // 如果启用了自动切换且未暂停，立即开始计时
       if (settings.value.autoNext && !isPaused.value) {
@@ -224,11 +282,107 @@ const handleBeforeUnload = (e: BeforeUnloadEvent) => {
   }
 }
 
+// 处理模式选择
+const handleModeSelect = (mode: 'sequential' | 'random') => {
+  showModeSelect.value = false
+  settings.value.mode = mode
+
+  if (mode === 'random') {
+    wordStore.shuffleWords()
+    wordStore.saveLearningSequence()
+  }
+
+  // 找到第一个未学习的单词
+  const firstUnlearnedIndex = wordStore.words.findIndex(
+    (word) => !wordStore.isWordLearned(word.number)
+  )
+  if (firstUnlearnedIndex !== -1) {
+    wordStore.jumpToWord(firstUnlearnedIndex)
+  }
+
+  // 保存设置
+  try {
+    localStorage.setItem('wordApp_settings', JSON.stringify(settings.value))
+  } catch (e) {
+    console.error('保存设置失败:', e)
+  }
+}
+
+const handleRestart = () => {
+  showCongratulations.value = false
+  currentRound.value++
+  wordStore.resetProgress()
+
+  // 如果是随机模式，重新打乱顺序
+  if (settings.value.mode === 'random') {
+    wordStore.shuffleWords()
+    wordStore.saveLearningSequence()
+  }
+
+  // 跳转到第一个单词
+  wordStore.jumpToWord(0)
+}
+
+const handleClearCache = () => {
+  // 清除所有本地存储
+  localStorage.removeItem('wordRecords')
+  localStorage.removeItem('wordApp_progress')
+  localStorage.removeItem('wordApp_settings')
+  localStorage.removeItem('wordApp_current_round')
+  localStorage.removeItem('wordApp_learning_sequence')
+  localStorage.removeItem('wordApp_has_selected_mode')
+
+  // 重置所有状态
+  wordStore.resetProgress()
+  settings.value = {
+    autoNext: false,
+    autoNextInterval: 5,
+    mode: 'sequential'
+  }
+  currentRound.value = 1
+  showModeSelect.value = true
+
+  // 显示提示
+  toastMessage.value = '缓存已清除'
+  showToast.value = true
+  setTimeout(() => {
+    showToast.value = false
+  }, 2000)
+}
+
 // 生命周期
 onMounted(() => {
   // 初始化数据
   wordStore.initializeStore()
   loadSettings()
+
+  // 检查是否首次使用
+  const hasSelectedMode = localStorage.getItem('wordApp_has_selected_mode')
+
+  if (!hasSelectedMode) {
+    showModeSelect.value = true
+    localStorage.setItem('wordApp_has_selected_mode', 'true')
+  } else {
+    // 恢复临时进度
+    const tempProgress = localStorage.getItem('wordApp_temp_progress')
+    if (tempProgress) {
+      try {
+        const { index } = JSON.parse(tempProgress)
+        wordStore.jumpToWord(index)
+        localStorage.removeItem('wordApp_temp_progress')
+      } catch (e) {
+        console.error('恢复临时进度失败:', e)
+      }
+    } else {
+      // 如果没有临时进度，找到第一个未学习的单词
+      const firstUnlearnedIndex = wordStore.words.findIndex(
+        (word) => !wordStore.isWordLearned(word.number)
+      )
+      if (firstUnlearnedIndex !== -1) {
+        wordStore.jumpToWord(firstUnlearnedIndex)
+      }
+    }
+  }
 
   // 绑定键盘事件
   document.addEventListener('keydown', handleKeyPress)
@@ -247,14 +401,6 @@ onMounted(() => {
 
   // 在组件挂载时添加事件监听
   window.addEventListener('beforeunload', handleBeforeUnload)
-
-  // 找到第一个未学习的单词
-  const firstUnlearnedIndex = wordStore.words.findIndex(
-    (word) => !wordStore.isWordLearned(word.number)
-  )
-  if (firstUnlearnedIndex !== -1) {
-    wordStore.jumpToWord(firstUnlearnedIndex)
-  }
 })
 
 // 清理
@@ -262,14 +408,28 @@ const cleanup = () => {
   clearAutoNextTimer()
   document.removeEventListener('keydown', handleKeyPress)
   document.body.style.overflow = ''
+
+  // 保存临时进度
+  try {
+    localStorage.setItem(
+      'wordApp_temp_progress',
+      JSON.stringify({
+        index: wordStore.currentWordIndex,
+        timestamp: Date.now()
+      })
+    )
+  } catch (e) {
+    console.error('保存临时进度失败:', e)
+  }
 }
 
 // 页面卸载时清理
 window.addEventListener('beforeunload', cleanup)
 
-// 在组件卸载时移除事件监听
+// 在组件卸载时移除事件监听和保存临时进度
 onUnmounted(() => {
   window.removeEventListener('beforeunload', handleBeforeUnload)
+  cleanup()
 })
 </script>
 

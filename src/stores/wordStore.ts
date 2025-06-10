@@ -6,10 +6,13 @@ import wordData from '../assets/netem_full_list.json'
 export const useWordStore = defineStore('word', () => {
   // 状态
   const words = ref<Word[]>(wordData.list)
+  const originalWords = [...wordData.list] // 保存原始顺序
+  const learningSequence = ref<number[]>([]) // 学习顺序（存储单词索引）
   const wordRecords = ref<Map<number, WordRecord>>(new Map())
   const currentWordIndex = ref(0)
   const isLoading = ref(false)
   const learnedWords = ref<Set<number>>(new Set())
+  const currentRound = ref(1)
 
   // 从localStorage加载数据
   const loadFromStorage = () => {
@@ -22,6 +25,16 @@ export const useWordStore = defineStore('word', () => {
         console.error('加载学习记录失败:', e)
       }
     }
+
+    // 加载当前轮数
+    const savedRound = localStorage.getItem('wordApp_current_round')
+    if (savedRound) {
+      try {
+        currentRound.value = parseInt(savedRound)
+      } catch (e) {
+        console.error('加载轮数失败:', e)
+      }
+    }
   }
 
   // 保存到localStorage
@@ -29,13 +42,38 @@ export const useWordStore = defineStore('word', () => {
     try {
       const data = Array.from(wordRecords.value.entries())
       localStorage.setItem('wordRecords', JSON.stringify(data))
+      localStorage.setItem(
+        'wordApp_current_round',
+        currentRound.value.toString()
+      )
     } catch (e) {
       console.error('保存学习记录失败:', e)
     }
   }
 
+  // 获取实际的单词索引
+  const getRealIndex = (index: number) => {
+    if (learningSequence.value.length > 0) {
+      return learningSequence.value[index]
+    }
+    return index
+  }
+
+  // 获取单词在学习序列中的位置
+  const getSequenceIndex = (wordNumber: number) => {
+    if (learningSequence.value.length > 0) {
+      return learningSequence.value.findIndex(
+        (idx) => words.value[idx].number === wordNumber
+      )
+    }
+    return words.value.findIndex((word) => word.number === wordNumber)
+  }
+
   // 计算属性
-  const currentWord = computed(() => words.value[currentWordIndex.value])
+  const currentWord = computed(() => {
+    const index = getRealIndex(currentWordIndex.value)
+    return words.value[index]
+  })
 
   const currentWordRecord = computed(() => {
     const wordId = currentWord.value?.number
@@ -108,13 +146,24 @@ export const useWordStore = defineStore('word', () => {
         console.error('加载进度失败:', e)
       }
     }
+
+    // 加载学习顺序
+    const savedSequence = localStorage.getItem('wordApp_learning_sequence')
+    if (savedSequence) {
+      try {
+        const sequence = JSON.parse(savedSequence)
+        learningSequence.value = sequence
+      } catch (e) {
+        console.error('加载学习顺序失败:', e)
+      }
+    }
   }
 
   const nextWord = () => {
     if (currentWordIndex.value < words.value.length - 1) {
       currentWordIndex.value++
     } else {
-      // 循环回到开始或者可以实现智能推荐
+      // 循环回到开始
       currentWordIndex.value = 0
     }
   }
@@ -204,8 +253,17 @@ export const useWordStore = defineStore('word', () => {
 
   const saveProgress = (currentIndex: number) => {
     // 将当前索引之前的所有单词标记为已学习
-    for (let i = 0; i <= currentIndex; i++) {
-      learnedWords.value.add(words.value[i].number)
+    if (learningSequence.value.length > 0) {
+      // 随机模式：使用学习序列中的索引
+      for (let i = 0; i <= currentIndex; i++) {
+        const realIndex = learningSequence.value[i]
+        learnedWords.value.add(words.value[realIndex].number)
+      }
+    } else {
+      // 顺序模式：直接使用索引
+      for (let i = 0; i <= currentIndex; i++) {
+        learnedWords.value.add(words.value[i].number)
+      }
     }
 
     // 保存进度
@@ -240,6 +298,42 @@ export const useWordStore = defineStore('word', () => {
     }
   }
 
+  // 打乱学习顺序
+  const shuffleWords = () => {
+    // 生成索引数组
+    learningSequence.value = Array.from(
+      { length: words.value.length },
+      (_, i) => i
+    )
+    // 打乱索引数组
+    for (let i = learningSequence.value.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1))
+      ;[learningSequence.value[i], learningSequence.value[j]] = [
+        learningSequence.value[j],
+        learningSequence.value[i]
+      ]
+    }
+    currentWordIndex.value = 0
+  }
+
+  // 恢复原始顺序
+  const restoreOriginalOrder = () => {
+    learningSequence.value = []
+    currentWordIndex.value = 0
+  }
+
+  // 保存学习顺序
+  const saveLearningSequence = () => {
+    try {
+      localStorage.setItem(
+        'wordApp_learning_sequence',
+        JSON.stringify(learningSequence.value)
+      )
+    } catch (e) {
+      console.error('保存学习顺序失败:', e)
+    }
+  }
+
   return {
     // 状态
     words,
@@ -247,6 +341,7 @@ export const useWordStore = defineStore('word', () => {
     currentWordIndex,
     isLoading,
     learnedWords,
+    currentRound,
 
     // 计算属性
     currentWord,
@@ -262,6 +357,9 @@ export const useWordStore = defineStore('word', () => {
     jumpToWord,
     saveProgress,
     isWordLearned,
-    unmarkWord
+    unmarkWord,
+    shuffleWords,
+    restoreOriginalOrder,
+    saveLearningSequence
   }
 })

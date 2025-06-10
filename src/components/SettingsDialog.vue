@@ -15,6 +15,55 @@
 
         <div class="dialog-body">
           <div class="settings-group">
+            <h3>学习模式</h3>
+            <div class="setting-item">
+              <div class="mode-options">
+                <button
+                  class="mode-option"
+                  :class="{ active: localSettings.mode === 'sequential' }"
+                  @click="
+                    localSettings.mode = 'sequential'
+                    updateSettings()
+                  "
+                >
+                  <div class="mode-icon">
+                    <svg viewBox="0 0 24 24">
+                      <path
+                        d="M3,14V4A1,1 0 0,1 4,3H10A1,1 0 0,1 11,4V14A1,1 0 0,1 10,15H4A1,1 0 0,1 3,14M4,4V14H10V4H4M13,14V4A1,1 0 0,1 14,3H20A1,1 0 0,1 21,4V14A1,1 0 0,1 20,15H14A1,1 0 0,1 13,14M14,4V14H20V4H14Z"
+                      />
+                    </svg>
+                  </div>
+                  <div class="mode-info">
+                    <h4>顺序模式</h4>
+                    <p>按照词频顺序学习单词</p>
+                  </div>
+                </button>
+
+                <button
+                  class="mode-option"
+                  :class="{ active: localSettings.mode === 'random' }"
+                  @click="
+                    localSettings.mode = 'random'
+                    updateSettings()
+                  "
+                >
+                  <div class="mode-icon">
+                    <svg viewBox="0 0 24 24">
+                      <path
+                        d="M14.83,13.41L13.42,14.82L16.55,17.95L14.5,20H20V14.5L17.96,16.54L14.83,13.41M14.5,4L16.54,6.04L4,18.59L5.41,20L17.96,7.46L20,9.5V4M10.59,9.17L5.41,4L4,5.41L9.17,10.58L10.59,9.17Z"
+                      />
+                    </svg>
+                  </div>
+                  <div class="mode-info">
+                    <h4>随机模式</h4>
+                    <p>随机顺序学习单词</p>
+                  </div>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div class="settings-group">
             <h3>学习设置</h3>
             <div class="setting-item">
               <label class="switch-label">
@@ -60,12 +109,29 @@
                 <span>重置学习进度</span>
               </button>
             </div>
+            <div class="setting-item">
+              <button
+                class="danger-btn clear-cache-btn"
+                @click="confirmClearCache"
+              >
+                <svg viewBox="0 0 24 24">
+                  <path
+                    d="M15,2A7,7,0,0,1,22,9V15A7,7,0,0,1,15,22H9A7,7,0,0,1,2,15V9A7,7,0,0,1,9,2H15M15,4H9A5,5,0,0,0,4,9V15A5,5,0,0,0,9,20H15A5,5,0,0,0,20,15V9A5,5,0,0,0,15,4M12,6A4,4,0,1,1,8,10A4,4,0,0,1,12,6M12,8A2,2,0,1,0,14,10A2,2,0,0,0,12,8Z"
+                  />
+                </svg>
+                <span>清除所有缓存</span>
+              </button>
+            </div>
           </div>
         </div>
 
-        <!-- 确认重置弹窗 -->
-        <div v-if="showResetConfirm" class="confirm-dialog">
-          <div class="confirm-content">
+        <!-- 重置确认弹窗 -->
+        <div
+          v-if="showResetConfirm"
+          class="confirm-dialog"
+          @click="showResetConfirm = false"
+        >
+          <div class="confirm-content" @click.stop>
             <h3>确认重置</h3>
             <p>确定要重置所有学习进度吗？此操作不可撤销。</p>
             <div class="confirm-actions">
@@ -73,6 +139,28 @@
                 取消
               </button>
               <button class="confirm-btn" @click="handleReset">确定重置</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- 清除缓存确认弹窗 -->
+        <div
+          v-if="showClearCacheConfirm"
+          class="confirm-dialog"
+          @click="showClearCacheConfirm = false"
+        >
+          <div class="confirm-content" @click.stop>
+            <h3>确认清除缓存</h3>
+            <p>
+              确定要清除所有缓存数据吗？这将清除所有设置、进度和学习记录，此操作不可撤销。
+            </p>
+            <div class="confirm-actions">
+              <button class="cancel-btn" @click="showClearCacheConfirm = false">
+                取消
+              </button>
+              <button class="confirm-btn" @click="handleClearCache">
+                确定清除
+              </button>
             </div>
           </div>
         </div>
@@ -87,6 +175,7 @@ import { ref, watch } from 'vue'
 interface Settings {
   autoNext: boolean
   autoNextInterval: number
+  mode: 'sequential' | 'random'
 }
 
 interface Props {
@@ -98,6 +187,7 @@ interface Emits {
   (e: 'close'): void
   (e: 'update', settings: Settings): void
   (e: 'reset'): void
+  (e: 'clearCache'): void
 }
 
 const props = defineProps<Props>()
@@ -106,7 +196,8 @@ const emit = defineEmits<Emits>()
 // 本地设置状态
 const localSettings = ref<Settings>({
   autoNext: props.settings.autoNext,
-  autoNextInterval: props.settings.autoNextInterval
+  autoNextInterval: props.settings.autoNextInterval,
+  mode: props.settings.mode
 })
 
 // 监听props变化
@@ -120,6 +211,7 @@ watch(
 
 // 重置确认
 const showResetConfirm = ref(false)
+const showClearCacheConfirm = ref(false)
 
 // 方法
 const handleIntervalInput = () => {
@@ -145,6 +237,16 @@ const confirmReset = () => {
 const handleReset = () => {
   showResetConfirm.value = false
   emit('reset')
+  emit('close')
+}
+
+const confirmClearCache = () => {
+  showClearCacheConfirm.value = true
+}
+
+const handleClearCache = () => {
+  showClearCacheConfirm.value = false
+  emit('clearCache')
   emit('close')
 }
 </script>
@@ -596,6 +698,125 @@ input:checked + .slider:before {
   .confirm-btn:hover {
     background: #b91c1c;
     border-color: #b91c1c;
+  }
+}
+
+.mode-options {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  width: 100%;
+}
+
+.mode-option {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem;
+  border: 2px solid #e2e8f0;
+  border-radius: 0.75rem;
+  background: white;
+  width: 100%;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  text-align: left;
+}
+
+.mode-option:hover {
+  border-color: #2563eb;
+  background: rgba(37, 99, 235, 0.04);
+}
+
+.mode-option.active {
+  border-color: #2563eb;
+  background: rgba(37, 99, 235, 0.08);
+}
+
+.mode-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  background: rgba(37, 99, 235, 0.1);
+  border-radius: 0.75rem;
+  flex-shrink: 0;
+}
+
+.mode-icon svg {
+  width: 1.25rem;
+  height: 1.25rem;
+  fill: #2563eb;
+}
+
+.mode-info h4 {
+  margin: 0 0 0.25rem;
+  font-size: 1rem;
+  color: #0f172a;
+  font-weight: 600;
+}
+
+.mode-info p {
+  margin: 0;
+  font-size: 0.875rem;
+  color: #64748b;
+}
+
+/* 暗黑模式适配 */
+@media (prefers-color-scheme: dark) {
+  .mode-option {
+    background: #1e293b;
+    border-color: #334155;
+  }
+
+  .mode-option:hover {
+    border-color: #60a5fa;
+    background: rgba(37, 99, 235, 0.15);
+  }
+
+  .mode-option.active {
+    border-color: #60a5fa;
+    background: rgba(37, 99, 235, 0.2);
+  }
+
+  .mode-icon {
+    background: rgba(37, 99, 235, 0.2);
+  }
+
+  .mode-icon svg {
+    fill: #60a5fa;
+  }
+
+  .mode-info h4 {
+    color: #f1f5f9;
+  }
+
+  .mode-info p {
+    color: #94a3b8;
+  }
+}
+
+.clear-cache-btn {
+  background: #7c3aed;
+  border-color: #7c3aed;
+}
+
+.clear-cache-btn:hover {
+  background: #6d28d9;
+  border-color: #6d28d9;
+}
+
+/* 暗黑模式适配 */
+@media (prefers-color-scheme: dark) {
+  .clear-cache-btn {
+    background: rgba(124, 58, 237, 0.1);
+    border-color: rgba(124, 58, 237, 0.2);
+    color: #a78bfa;
+  }
+
+  .clear-cache-btn:hover {
+    background: rgba(124, 58, 237, 0.15);
+    border-color: rgba(124, 58, 237, 0.25);
   }
 }
 </style>
