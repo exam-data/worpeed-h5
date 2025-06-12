@@ -2,6 +2,8 @@
   <AppLayout
     :show-settings="showSettings"
     @toggle-settings="showSettings = !showSettings"
+    @reset-progress="resetProgress"
+    @clear-cache="handleClearCache"
   >
     <!-- 单词卡片 -->
     <WordCard
@@ -49,15 +51,7 @@
       </button>
     </div>
 
-    <!-- 设置弹窗 -->
-    <SettingsDialog
-      :show="showSettings"
-      :settings="settings"
-      @close="showSettings = false"
-      @update="updateSettings"
-      @reset="resetProgress"
-      @clearCache="handleClearCache"
-    />
+    <!-- 设置弹窗 (已移至AppLayout) -->
 
     <!-- 提示弹窗 -->
     <Toast :show="showToast" :message="toastMessage" />
@@ -72,7 +66,6 @@ import { ref, onMounted, nextTick, onUnmounted } from 'vue'
 import { useWordStore } from '../stores/wordStore'
 import AppLayout from '../components/layout/AppLayout.vue'
 import WordCard from '../components/WordCard.vue'
-import SettingsDialog from '../components/SettingsDialog.vue'
 import Toast from '../components/Toast.vue'
 import ModeSelectDialog from '../components/ModeSelectDialog.vue'
 import CongratulationsView from '../components/CongratulationsView.vue'
@@ -190,36 +183,6 @@ const togglePause = () => {
 
 const resetProgress = () => {
   wordStore.resetProgress()
-}
-
-const updateSettings = (newSettings: Settings) => {
-  const oldMode = settings.value.mode
-  settings.value = newSettings
-
-  // 如果模式发生变化，需要处理学习顺序
-  if (oldMode !== newSettings.mode) {
-    if (newSettings.mode === 'random') {
-      wordStore.shuffleWords()
-      wordStore.saveLearningSequence()
-    } else {
-      wordStore.restoreOriginalOrder()
-    }
-  }
-
-  // 根据新设置更新自动切换
-  if (newSettings.autoNext && !isPaused.value) {
-    setAutoNextTimer()
-  } else if (!newSettings.autoNext) {
-    clearAutoNextTimer()
-    isPaused.value = false
-  }
-
-  // 保存设置
-  try {
-    localStorage.setItem('wordApp_settings', JSON.stringify(settings.value))
-  } catch (e) {
-    console.error('保存设置失败:', e)
-  }
 }
 
 const loadSettings = () => {

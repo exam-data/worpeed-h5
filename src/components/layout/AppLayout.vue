@@ -35,7 +35,7 @@
         <button
           class="nav-item"
           :class="{ active: showSettings }"
-          @click="$emit('toggle-settings')"
+          @click="showSettings = !showSettings"
         >
           <svg viewBox="0 0 24 24" class="nav-icon">
             <path
@@ -46,23 +46,88 @@
         </button>
       </nav>
     </footer>
+
+    <!-- 设置弹窗 -->
+    <SettingsDialog
+      :show="showSettings"
+      :settings="settings"
+      @close="showSettings = false"
+      @update="updateSettings"
+      @reset="resetProgress"
+      @clearCache="handleClearCache"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-interface Props {
-  showSettings?: boolean
+import { ref, watch } from 'vue'
+import SettingsDialog from '../SettingsDialog.vue'
+
+interface Settings {
+  autoNext: boolean
+  autoNextInterval: number
+  mode: 'sequential' | 'random'
 }
 
-interface Emits {
-  (e: 'toggle-settings'): void
-}
-
-withDefaults(defineProps<Props>(), {
-  showSettings: false
+// 状态
+const showSettings = ref(false)
+const settings = ref<Settings>({
+  autoNext: false,
+  autoNextInterval: 5,
+  mode: 'sequential'
 })
 
-defineEmits<Emits>()
+// 方法
+const updateSettings = (newSettings: Settings) => {
+  settings.value = newSettings
+  // 保存到localStorage
+  try {
+    localStorage.setItem('wordApp_settings', JSON.stringify(newSettings))
+  } catch (e) {
+    console.error('保存设置失败:', e)
+  }
+}
+
+const resetProgress = () => {
+  // 这个功能与wordStore紧密相关，需要通过事件通知父组件
+  emit('reset-progress')
+  showSettings.value = false
+}
+
+const handleClearCache = () => {
+  // 这个功能也需要通知父组件
+  emit('clear-cache')
+  showSettings.value = false
+}
+
+// 从localStorage加载设置
+const loadSettings = () => {
+  const saved = localStorage.getItem('wordApp_settings')
+  if (saved) {
+    try {
+      const data = JSON.parse(saved)
+      settings.value = { ...settings.value, ...data }
+    } catch (e) {
+      console.error('加载设置失败:', e)
+    }
+  }
+}
+
+// 加载设置
+loadSettings()
+
+interface Emits {
+  (e: 'reset-progress'): void
+  (e: 'clear-cache'): void
+}
+
+const emit = defineEmits<Emits>()
+
+watch(showSettings, (value) => {
+  if (value) {
+    loadSettings()
+  }
+})
 </script>
 
 <style scoped>

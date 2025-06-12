@@ -1,5 +1,5 @@
 <template>
-  <AppLayout>
+  <AppLayout @clear-cache="handleClearCache">
     <div class="word-list-container" @touchmove.stop>
       <!-- 搜索和跳转栏 -->
       <div class="search-section">
@@ -302,6 +302,22 @@ const confirmAndStart = () => {
   wordStore.saveProgress(selectedWordIndex.value - 1)
   showConfirm.value = false
   startLearningFrom(selectedWordIndex.value)
+}
+
+const handleClearCache = () => {
+  // 清除所有本地存储
+  localStorage.removeItem('wordRecords')
+  localStorage.removeItem('wordApp_progress')
+  localStorage.removeItem('wordApp_settings')
+  localStorage.removeItem('wordApp_current_round')
+  localStorage.removeItem('wordApp_learning_sequence')
+  localStorage.removeItem('wordApp_has_selected_mode')
+
+  // 重置 store 状态
+  wordStore.resetProgress()
+
+  // 重新加载数据
+  wordStore.initializeStore()
 }
 
 // 生命周期

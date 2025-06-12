@@ -21,10 +21,7 @@
                 <button
                   class="mode-option"
                   :class="{ active: localSettings.mode === 'sequential' }"
-                  @click="
-                    localSettings.mode = 'sequential'
-                    updateSettings()
-                  "
+                  @click="handleModeChange('sequential')"
                 >
                   <div class="mode-icon">
                     <svg viewBox="0 0 24 24">
@@ -42,10 +39,7 @@
                 <button
                   class="mode-option"
                   :class="{ active: localSettings.mode === 'random' }"
-                  @click="
-                    localSettings.mode = 'random'
-                    updateSettings()
-                  "
+                  @click="handleModeChange('random')"
                 >
                   <div class="mode-icon">
                     <svg viewBox="0 0 24 24">
@@ -170,7 +164,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { ref, watch, onMounted, onUnmounted } from 'vue'
 
 interface Settings {
   autoNext: boolean
@@ -213,6 +207,52 @@ watch(
 const showResetConfirm = ref(false)
 const showClearCacheConfirm = ref(false)
 
+// 添加触摸滑动功能
+let startY = 0
+let currentY = 0
+let isTouching = false
+
+const onTouchStart = (event: TouchEvent) => {
+  startY = event.touches[0].clientY
+  isTouching = true
+}
+
+const onTouchMove = (event: TouchEvent) => {
+  if (!isTouching) return
+  currentY = event.touches[0].clientY
+  const deltaY = currentY - startY
+  const dialogContent = document.querySelector('.dialog-content')
+  if (dialogContent) {
+    dialogContent.scrollTop -= deltaY
+  }
+  startY = currentY
+}
+
+const onTouchEnd = () => {
+  isTouching = false
+}
+
+onMounted(() => {
+  const dialogContent = document.querySelector('.dialog-content')
+  if (dialogContent) {
+    dialogContent.addEventListener('touchstart', onTouchStart as EventListener)
+    dialogContent.addEventListener('touchmove', onTouchMove as EventListener)
+    dialogContent.addEventListener('touchend', onTouchEnd as EventListener)
+  }
+})
+
+onUnmounted(() => {
+  const dialogContent = document.querySelector('.dialog-content')
+  if (dialogContent) {
+    dialogContent.removeEventListener(
+      'touchstart',
+      onTouchStart as EventListener
+    )
+    dialogContent.removeEventListener('touchmove', onTouchMove as EventListener)
+    dialogContent.removeEventListener('touchend', onTouchEnd as EventListener)
+  }
+})
+
 // 方法
 const handleIntervalInput = () => {
   // 确保值不小于1
@@ -248,6 +288,12 @@ const handleClearCache = () => {
   showClearCacheConfirm.value = false
   emit('clearCache')
   emit('close')
+}
+
+// 添加新的方法
+const handleModeChange = (mode: 'sequential' | 'random') => {
+  localSettings.value.mode = mode
+  updateSettings()
 }
 </script>
 
