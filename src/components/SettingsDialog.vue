@@ -1,7 +1,8 @@
 <template>
   <Transition name="dialog">
     <div v-if="show" class="settings-dialog" @click="$emit('close')">
-      <div class="dialog-content" @click.stop>
+      <div class="dialog-container" @click.stop>
+        <!-- 固定的标题栏 -->
         <div class="dialog-header">
           <h2>设置</h2>
           <button class="close-btn" @click="$emit('close')">
@@ -13,108 +14,111 @@
           </button>
         </div>
 
-        <div class="dialog-body">
-          <div class="settings-group">
-            <h3>学习模式</h3>
-            <div class="setting-item">
-              <div class="mode-options">
-                <button
-                  class="mode-option"
-                  :class="{ active: localSettings.mode === 'sequential' }"
-                  @click="handleModeChange('sequential')"
-                >
-                  <div class="mode-icon">
-                    <svg viewBox="0 0 24 24">
-                      <path
-                        d="M3,14V4A1,1 0 0,1 4,3H10A1,1 0 0,1 11,4V14A1,1 0 0,1 10,15H4A1,1 0 0,1 3,14M4,4V14H10V4H4M13,14V4A1,1 0 0,1 14,3H20A1,1 0 0,1 21,4V14A1,1 0 0,1 20,15H14A1,1 0 0,1 13,14M14,4V14H20V4H14Z"
-                      />
-                    </svg>
-                  </div>
-                  <div class="mode-info">
-                    <h4>顺序模式</h4>
-                    <p>按照词频顺序学习单词</p>
-                  </div>
-                </button>
+        <!-- 可滚动的内容区域 -->
+        <div class="dialog-content" ref="dialogContentRef">
+          <div class="dialog-body">
+            <div class="settings-group">
+              <h3>学习模式</h3>
+              <div class="setting-item">
+                <div class="mode-options">
+                  <button
+                    class="mode-option"
+                    :class="{ active: localSettings.mode === 'sequential' }"
+                    @click="handleModeChange('sequential')"
+                  >
+                    <div class="mode-icon">
+                      <svg viewBox="0 0 24 24">
+                        <path
+                          d="M3,14V4A1,1 0 0,1 4,3H10A1,1 0 0,1 11,4V14A1,1 0 0,1 10,15H4A1,1 0 0,1 3,14M4,4V14H10V4H4M13,14V4A1,1 0 0,1 14,3H20A1,1 0 0,1 21,4V14A1,1 0 0,1 20,15H14A1,1 0 0,1 13,14M14,4V14H20V4H14Z"
+                        />
+                      </svg>
+                    </div>
+                    <div class="mode-info">
+                      <h4>顺序模式</h4>
+                      <p>按照词频顺序学习单词</p>
+                    </div>
+                  </button>
 
-                <button
-                  class="mode-option"
-                  :class="{ active: localSettings.mode === 'random' }"
-                  @click="handleModeChange('random')"
-                >
-                  <div class="mode-icon">
-                    <svg viewBox="0 0 24 24">
-                      <path
-                        d="M14.83,13.41L13.42,14.82L16.55,17.95L14.5,20H20V14.5L17.96,16.54L14.83,13.41M14.5,4L16.54,6.04L4,18.59L5.41,20L17.96,7.46L20,9.5V4M10.59,9.17L5.41,4L4,5.41L9.17,10.58L10.59,9.17Z"
-                      />
-                    </svg>
-                  </div>
-                  <div class="mode-info">
-                    <h4>随机模式</h4>
-                    <p>随机顺序学习单词</p>
-                  </div>
-                </button>
+                  <button
+                    class="mode-option"
+                    :class="{ active: localSettings.mode === 'random' }"
+                    @click="handleModeChange('random')"
+                  >
+                    <div class="mode-icon">
+                      <svg viewBox="0 0 24 24">
+                        <path
+                          d="M14.83,13.41L13.42,14.82L16.55,17.95L14.5,20H20V14.5L17.96,16.54L14.83,13.41M14.5,4L16.54,6.04L4,18.59L5.41,20L17.96,7.46L20,9.5V4M10.59,9.17L5.41,4L4,5.41L9.17,10.58L10.59,9.17Z"
+                        />
+                      </svg>
+                    </div>
+                    <div class="mode-info">
+                      <h4>随机模式</h4>
+                      <p>随机顺序学习单词</p>
+                    </div>
+                  </button>
+                </div>
               </div>
             </div>
-          </div>
 
-          <div class="settings-group">
-            <h3>学习设置</h3>
-            <div class="setting-item">
-              <label class="switch-label">
-                <span>自动切换</span>
-                <div class="switch">
-                  <input
-                    type="checkbox"
-                    v-model="localSettings.autoNext"
-                    @change="updateSettings"
-                  />
-                  <span class="slider"></span>
-                </div>
-              </label>
+            <div class="settings-group">
+              <h3>学习设置</h3>
+              <div class="setting-item">
+                <label class="switch-label">
+                  <span>自动切换</span>
+                  <div class="switch">
+                    <input
+                      type="checkbox"
+                      v-model="localSettings.autoNext"
+                      @change="updateSettings"
+                    />
+                    <span class="slider"></span>
+                  </div>
+                </label>
+              </div>
+
+              <div class="setting-item" v-if="localSettings.autoNext">
+                <label class="input-label">
+                  切换间隔：
+                  <div class="input-with-unit">
+                    <input
+                      type="number"
+                      v-model.number="localSettings.autoNextInterval"
+                      @input="handleIntervalInput"
+                      class="number-input"
+                      min="1"
+                      step="1"
+                    />
+                    <span class="unit">秒</span>
+                  </div>
+                </label>
+              </div>
             </div>
 
-            <div class="setting-item" v-if="localSettings.autoNext">
-              <label class="input-label">
-                切换间隔：
-                <div class="input-with-unit">
-                  <input
-                    type="number"
-                    v-model.number="localSettings.autoNextInterval"
-                    @input="handleIntervalInput"
-                    class="number-input"
-                    min="1"
-                    step="1"
-                  />
-                  <span class="unit">秒</span>
-                </div>
-              </label>
-            </div>
-          </div>
-
-          <div class="settings-group">
-            <h3>数据管理</h3>
-            <div class="setting-item">
-              <button class="danger-btn" @click="confirmReset">
-                <svg viewBox="0 0 24 24">
-                  <path
-                    d="M19,4H15.5L14.5,3H9.5L8.5,4H5V6H19M6,19A2,2 0 0,0 8,21H16A2,2 0 0,0 18,19V7H6V19Z"
-                  />
-                </svg>
-                <span>重置学习进度</span>
-              </button>
-            </div>
-            <div class="setting-item">
-              <button
-                class="danger-btn clear-cache-btn"
-                @click="confirmClearCache"
-              >
-                <svg viewBox="0 0 24 24">
-                  <path
-                    d="M15,2A7,7,0,0,1,22,9V15A7,7,0,0,1,15,22H9A7,7,0,0,1,2,15V9A7,7,0,0,1,9,2H15M15,4H9A5,5,0,0,0,4,9V15A5,5,0,0,0,9,20H15A5,5,0,0,0,20,15V9A5,5,0,0,0,15,4M12,6A4,4,0,1,1,8,10A4,4,0,0,1,12,6M12,8A2,2,0,1,0,14,10A2,2,0,0,0,12,8Z"
-                  />
-                </svg>
-                <span>清除所有缓存</span>
-              </button>
+            <div class="settings-group">
+              <h3>数据管理</h3>
+              <div class="setting-item">
+                <button class="danger-btn" @click="confirmReset">
+                  <svg viewBox="0 0 24 24">
+                    <path
+                      d="M19,4H15.5L14.5,3H9.5L8.5,4H5V6H19M6,19A2,2 0 0,0 8,21H16A2,2 0 0,0 18,19V7H6V19Z"
+                    />
+                  </svg>
+                  <span>重置学习进度</span>
+                </button>
+              </div>
+              <div class="setting-item">
+                <button
+                  class="danger-btn clear-cache-btn"
+                  @click="confirmClearCache"
+                >
+                  <svg viewBox="0 0 24 24">
+                    <path
+                      d="M15,2A7,7,0,0,1,22,9V15A7,7,0,0,1,15,22H9A7,7,0,0,1,2,15V9A7,7,0,0,1,9,2H15M15,4H9A5,5,0,0,0,4,9V15A5,5,0,0,0,9,20H15A5,5,0,0,0,20,15V9A5,5,0,0,0,15,4M12,6A4,4,0,1,1,8,10A4,4,0,0,1,12,6M12,8A2,2,0,1,0,14,10A2,2,0,0,0,12,8Z"
+                    />
+                  </svg>
+                  <span>清除所有缓存</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -207,49 +211,140 @@ watch(
 const showResetConfirm = ref(false)
 const showClearCacheConfirm = ref(false)
 
-// 添加触摸滑动功能
+// 触摸滑动相关变量
+const dialogContentRef = ref<HTMLElement | null>(null)
 let startY = 0
 let currentY = 0
+let lastScrollTop = 0
 let isTouching = false
+let touchStartTime = 0
+let touchStartScrollTop = 0
+let velocity = 0
+let animationFrameId: number | null = null
 
-const onTouchStart = (event: TouchEvent) => {
-  startY = event.touches[0].clientY
-  isTouching = true
-}
+// 触摸事件处理函数
+const handleTouchStart = (e: TouchEvent) => {
+  if (!dialogContentRef.value) return
 
-const onTouchMove = (event: TouchEvent) => {
-  if (!isTouching) return
-  currentY = event.touches[0].clientY
-  const deltaY = currentY - startY
-  const dialogContent = document.querySelector('.dialog-content')
-  if (dialogContent) {
-    dialogContent.scrollTop -= deltaY
+  // 停止任何正在进行的动画
+  if (animationFrameId !== null) {
+    cancelAnimationFrame(animationFrameId)
+    animationFrameId = null
   }
+
+  startY = e.touches[0].clientY
+  touchStartTime = Date.now()
+  isTouching = true
+  lastScrollTop = dialogContentRef.value.scrollTop
+  touchStartScrollTop = lastScrollTop
+  velocity = 0
+}
+
+const handleTouchMove = (e: TouchEvent) => {
+  if (!isTouching || !dialogContentRef.value) return
+
+  // 阻止默认滚动行为
+  e.preventDefault()
+
+  currentY = e.touches[0].clientY
+  const deltaY = currentY - startY
+
+  // 计算新的滚动位置
+  const newScrollTop = lastScrollTop - deltaY
+
+  // 应用滚动
+  dialogContentRef.value.scrollTop = newScrollTop
+
+  // 更新起始位置和上次滚动位置
   startY = currentY
+  lastScrollTop = dialogContentRef.value.scrollTop
+
+  // 计算速度 (像素/毫秒)
+  const now = Date.now()
+  const timeDiff = now - touchStartTime
+  if (timeDiff > 0) {
+    velocity =
+      (dialogContentRef.value.scrollTop - touchStartScrollTop) / timeDiff
+  }
 }
 
-const onTouchEnd = () => {
+const handleTouchEnd = () => {
+  if (!isTouching || !dialogContentRef.value) return
+
   isTouching = false
+
+  // 惯性滚动
+  const initialVelocity = velocity * 15 // 放大速度效果
+  let lastTimestamp: number | null = null
+
+  const animateScroll = (timestamp: number) => {
+    if (!dialogContentRef.value) return
+
+    if (lastTimestamp === null) {
+      lastTimestamp = timestamp
+      animationFrameId = requestAnimationFrame(animateScroll)
+      return
+    }
+
+    const elapsed = timestamp - lastTimestamp
+    lastTimestamp = timestamp
+
+    // 减速因子
+    const friction = 0.95
+
+    // 更新速度和位置
+    velocity *= friction
+
+    // 如果速度足够小，停止动画
+    if (Math.abs(velocity) < 0.05) {
+      if (animationFrameId !== null) {
+        cancelAnimationFrame(animationFrameId)
+        animationFrameId = null
+      }
+      return
+    }
+
+    // 应用滚动
+    dialogContentRef.value.scrollTop += velocity * elapsed
+
+    // 继续动画
+    animationFrameId = requestAnimationFrame(animateScroll)
+  }
+
+  // 只有当速度足够大时才应用惯性滚动
+  if (Math.abs(initialVelocity) > 0.1) {
+    velocity = initialVelocity
+    animationFrameId = requestAnimationFrame(animateScroll)
+  }
 }
 
+// 在组件挂载时添加触摸事件监听器
 onMounted(() => {
-  const dialogContent = document.querySelector('.dialog-content')
-  if (dialogContent) {
-    dialogContent.addEventListener('touchstart', onTouchStart as EventListener)
-    dialogContent.addEventListener('touchmove', onTouchMove as EventListener)
-    dialogContent.addEventListener('touchend', onTouchEnd as EventListener)
+  if (dialogContentRef.value) {
+    dialogContentRef.value.addEventListener('touchstart', handleTouchStart, {
+      passive: false
+    })
+    dialogContentRef.value.addEventListener('touchmove', handleTouchMove, {
+      passive: false
+    })
+    dialogContentRef.value.addEventListener('touchend', handleTouchEnd, {
+      passive: false
+    })
   }
 })
 
+// 在组件卸载时移除触摸事件监听器
 onUnmounted(() => {
-  const dialogContent = document.querySelector('.dialog-content')
-  if (dialogContent) {
-    dialogContent.removeEventListener(
-      'touchstart',
-      onTouchStart as EventListener
-    )
-    dialogContent.removeEventListener('touchmove', onTouchMove as EventListener)
-    dialogContent.removeEventListener('touchend', onTouchEnd as EventListener)
+  if (dialogContentRef.value) {
+    dialogContentRef.value.removeEventListener('touchstart', handleTouchStart)
+    dialogContentRef.value.removeEventListener('touchmove', handleTouchMove)
+    dialogContentRef.value.removeEventListener('touchend', handleTouchEnd)
+  }
+
+  // 清理任何可能正在进行的动画
+  if (animationFrameId !== null) {
+    cancelAnimationFrame(animationFrameId)
+    animationFrameId = null
   }
 })
 
@@ -312,15 +407,15 @@ const handleModeChange = (mode: 'sequential' | 'random') => {
   z-index: 1000;
 }
 
-.dialog-content {
+.dialog-container {
   background: white;
   width: 100%;
   max-width: 560px;
   border-radius: 2rem 2rem 0 0;
-  padding: 2rem;
   position: relative;
   max-height: 90vh;
-  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
   box-shadow: 0 -10px 40px -12px rgba(0, 0, 0, 0.15);
 }
 
@@ -328,7 +423,13 @@ const handleModeChange = (mode: 'sequential' | 'random') => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 2rem;
+  padding: 2rem 2rem 1rem;
+  border-bottom: 1px solid rgba(37, 99, 235, 0.1);
+  position: sticky;
+  top: 0;
+  background: white;
+  z-index: 10;
+  border-radius: 2rem 2rem 0 0;
 }
 
 .dialog-header h2 {
@@ -337,6 +438,24 @@ const handleModeChange = (mode: 'sequential' | 'random') => {
   color: #0f172a;
   font-weight: 600;
   letter-spacing: -0.02em;
+}
+
+.dialog-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 2rem 2rem;
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE and Edge */
+  padding-bottom: calc(2rem + env(safe-area-inset-bottom, 0px));
+}
+
+/* 隐藏Webkit浏览器的滚动条 */
+.dialog-content::-webkit-scrollbar {
+  display: none;
+}
+
+.dialog-body {
+  padding-top: 1rem;
 }
 
 .close-btn {
